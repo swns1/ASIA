@@ -155,6 +155,12 @@ export const getDocumentStatus = (params = {}) =>
 export const getEnrollment = (id) =>
   enrollmentClient.get(`/enrollments/${id}/`).then((r) => r.data);
 
+// The subjects this enrollment takes (its year and grade; senior high: core +
+// strand, that semester's), for its Certificate of Registration. Readable by
+// whoever may open the enrollment, guardians included -- /subjects/ is not.
+export const getEnrollmentSubjects = (id) =>
+  enrollmentClient.get(`/enrollments/${id}/subjects/`).then((r) => r.data);
+
 export const createEnrollment = (payload) =>
   enrollmentClient.post("/enrollments/", payload).then((r) => r.data);
 

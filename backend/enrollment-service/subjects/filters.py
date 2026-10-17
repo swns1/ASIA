@@ -52,3 +52,26 @@ class SubjectFilter(filters.FilterSet):
         if not value:
             return queryset
         return queryset.filter(Q(semester=value) | Q(semester__isnull=True) | Q(semester=""))
+
+
+def enrollment_subject_params(enrollment):
+    """
+    The SubjectFilter query for the subjects one enrollment takes: its year
+    and grade, and for senior high its strand's and semester's (core subjects
+    included, see for_strand / for_semester).
+
+    The Certificate of Registration used to build this in the browser and ask
+    /api/subjects/ for it, which guardians may not read -- so a parent could
+    not print their own child's certificate. GET /api/enrollments/{id}/subjects/
+    answers from here instead, for every role that may open the enrollment.
+    """
+    params = {
+        "school_year": enrollment.school_year,
+        "school_level": enrollment.school_level,
+        "grade_level": enrollment.grade_level,
+    }
+    if enrollment.strand:
+        params["for_strand"] = enrollment.strand
+    if enrollment.semester:
+        params["for_semester"] = enrollment.semester
+    return params

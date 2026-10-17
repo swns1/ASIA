@@ -2694,6 +2694,28 @@ class EnrollmentViewSet(ArchivedYearGuard, viewsets.ModelViewSet):
         )
         return Response(GradeSerializer(qs, many=True).data)
 
+    @action(detail=True, methods=["get"], url_path="subjects")
+    def subjects(self, request, pk=None):
+        """
+        GET /api/enrollments/{id}/subjects/ — the subjects this enrollment
+        takes, for its Certificate of Registration.
+
+        get_object() applies the same access as reading the enrollment itself:
+        a guardian only their own child's, a teacher only their roster. Only
+        what the certificate prints is returned -- not the grading template
+        that /api/subjects/ carries for staff.
+        """
+        from subjects.filters import SubjectFilter, enrollment_subject_params
+        from subjects.models import Subject
+
+        enrollment = self.get_object()
+        qs = SubjectFilter(
+            enrollment_subject_params(enrollment), queryset=Subject.objects.all(),
+        ).qs.order_by("subject_name")
+        return Response(list(qs.values(
+            "subject_id", "subject_code", "subject_name", "strand", "semester",
+        )))
+
     @action(detail=False, methods=["get"], url_path="eligibility")
     def eligibility(self, request):
         """

@@ -881,9 +881,19 @@ export default function GuardianChildPage() {
                 but nothing in this portal linked to it, so a parent had no way
                 to reach it. Its own toolbar has a Back button (navigate(-1)),
                 so this doesn't strand anyone on a chrome-less page. */}
-            <Button variant="secondary" size="sm" icon="ti-printer" to={`/report-card/${enrollmentId}`} className="w-full sm:w-auto">
-              Printable report card
-            </Button>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              {/* The enrollment confirmation's printable copy, for a family
+                  that missed (or never got) the email. Enrolled only: the
+                  certificate states the learner "is officially enrolled". */}
+              {enrollment?.enrollment_status === "enrolled" && (
+                <Button variant="secondary" size="sm" icon="ti-file-certificate" to={`/print/cor/${enrollmentId}`} className="w-full sm:w-auto">
+                  Certificate of registration
+                </Button>
+              )}
+              <Button variant="secondary" size="sm" icon="ti-printer" to={`/report-card/${enrollmentId}`} className="w-full sm:w-auto">
+                Printable report card
+              </Button>
+            </div>
           </div>
         ) : (
           <div>

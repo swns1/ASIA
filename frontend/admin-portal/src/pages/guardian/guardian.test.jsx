@@ -640,3 +640,31 @@ describe("GuardianChildPage — switching children", () => {
     expect(getStudentLedger).not.toHaveBeenCalledWith(100);
   });
 });
+
+describe("GuardianChildPage — certificate of registration", () => {
+  // The enrollment email's printable copy, for a family that missed it. It
+  // says the learner "is officially enrolled", so only an Enrolled year has it.
+  const withStatus = (enrollment_status) => ({
+    ...REPORT_CARD,
+    enrollment: { ...REPORT_CARD.enrollment, enrollment_status },
+  });
+
+  it("links an enrolled year to its certificate", async () => {
+    getReportCard.mockResolvedValue(withStatus("enrolled"));
+
+    renderChildPage();
+
+    const link = await screen.findByRole("link", { name: /Certificate of registration/ });
+    expect(link.getAttribute("href")).toBe("/print/cor/200");
+  });
+
+  it.each(["pending", "cancelled", "completed"])("offers none for a %s year", async (status) => {
+    getReportCard.mockResolvedValue(withStatus(status));
+
+    renderChildPage();
+    await screen.findByText("Maria Santos Reyes");
+
+    expect(screen.queryByRole("link", { name: /Certificate of registration/ })).toBeNull();
+    expect(screen.getByRole("link", { name: /Printable report card/ })).toBeTruthy();
+  });
+});

@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
-import { getEnrollment, getSubjects } from "../../api/enrollmentApi";
-import { getStudent } from "../../api/studentApi";
+import { useNavigate, useParams } from "react-router-dom";
+import { getEnrollment, getEnrollmentSubjects } from "../../api/enrollmentApi";
 import { getSchoolSettings } from "../../api/billingApi";
 import { downloadAsPDF } from "../../utils/pdfExport";
 import { PRINT_COLORS as C } from "../../components/print/theme";
@@ -15,6 +14,7 @@ import { ENROLLMENT_STATUS_META } from "../../components/print/statusMeta";
 
 export default function CORPrintPage() {
   const { enrollmentId } = useParams();
+  const navigate = useNavigate();
   const [enrollment,     setEnrollment]     = useState(null);
   const [student,        setStudent]        = useState(null);
   const [subjects,       setSubjects]       = useState([]);
@@ -27,30 +27,18 @@ export default function CORPrintPage() {
   useEffect(() => {
     (async () => {
       try {
-        const enr = await getEnrollment(enrollmentId);
-        setEnrollment(enr);
-        const studentId = enr.student_detail?.student_id ?? enr.student;
-        const [stu, subs, settings] = await Promise.all([
-          getStudent(studentId),
-          // This learner's year and grade only, every subject of it, and for
-          // senior high the core subjects plus their strand's. It asked for the
-          // whole school level on the default page of 20, so a Grade 6
-          // certificate printed Grade 1-3 subjects.
-          getSubjects({
-            school_year: enr.school_year,
-            school_level: enr.school_level,
-            grade_level: enr.grade_level,
-            page_size: 100,
-            ...(enr.strand   ? { for_strand: enr.strand } : {}),
-            // for_semester, not semester: the exact match dropped subjects
-            // with no semester recorded, and a HUMSS or ABM certificate
-            // printed "No subjects on record".
-            ...(enr.semester ? { for_semester: enr.semester } : {}),
-          }),
+        // The enrollment carries the learner (student_detail) and the server
+        // works out its subjects (year, grade; senior high: core + strand,
+        // that semester's), so the page reads nothing a guardian is refused:
+        // it used to ask /students/ and /subjects/, which are staff-only.
+        const [enr, subs, settings] = await Promise.all([
+          getEnrollment(enrollmentId),
+          getEnrollmentSubjects(enrollmentId),
           getSchoolSettings().catch(() => null),
         ]);
-        setStudent(stu);
-        setSubjects(Array.isArray(subs) ? subs : subs.results ?? []);
+        setEnrollment(enr);
+        setStudent(enr.student_detail ?? null);
+        setSubjects(subs);
         if (settings?.school_name) setSchoolName(settings.school_name);
         if (settings?.school_address) setSchoolAddress(settings.school_address);
       } catch (e) {
@@ -85,7 +73,10 @@ export default function CORPrintPage() {
   return (
     <>
       <PrintToolbar
-        onBack={() => window.close()}
+        // Staff open it in a new tab (Enrollment detail), which Close shuts;
+        // a guardian opens it in place from their child's page, so Back.
+        onBack={() => (window.opener ? window.close() : navigate(-1))}
+        backLabel={window.opener ? "Close" : "Back"}
         title={`Certificate of Registration — ${fullName} · SY ${enrollment.school_year}`}
         actions={
           <>

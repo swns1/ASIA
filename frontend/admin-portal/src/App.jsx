@@ -197,7 +197,9 @@ export default function App() {
         <Route path="/report-card/:enrollmentId" element={<P roles={[...GRADE_ROLES, ...GUARDIAN]}><ReportCardPage /></P>} />
 
         {/* ── Print / PDF documents (no shell by design) ── */}
-        <Route path="/print/cor/:enrollmentId"        element={<P roles={STAFF_ALL}><CORPrintPage /></P>} />
+        {/* Guardians print their own child's (the server scopes the
+            enrollment and its subjects to them), from the child page. */}
+        <Route path="/print/cor/:enrollmentId"        element={<P roles={[...STAFF_ALL, ...GUARDIAN]}><CORPrintPage /></P>} />
         <Route path="/print/receipt/:paymentId"       element={<P roles={BILLING_ROLES}><ReceiptPrintPage /></P>} />
         <Route path="/print/invoice/:invoiceId"       element={<P roles={BILLING_ROLES}><InvoicePrintPage /></P>} />
         {/* Grades: the server refuses accounting. SF1, SF2 and SF10 are no
